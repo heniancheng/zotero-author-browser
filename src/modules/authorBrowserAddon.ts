@@ -31,7 +31,7 @@ export function registerToolsMenuItem() {
   ztoolkit.Menu.register("menuTools", {
     tag: "menuitem",
     id: "author-browser-tool-menu-item",
-    label: "清空搜索",
+    label: getString("author-browser-tool-menu-clear-search"),
     commandListener: (ev) => deleteABSavedSearches(),
   });
 }
@@ -138,7 +138,7 @@ export async function getAllCreators(orderBy: "firstName"|"lastName"|"itemCount"
     const sql = "SELECT creators.firstName, creators.lastName, creators.creatorID, COUNT(itemCreators.itemID) AS itemCount \
                  FROM creators \
                  JOIN itemCreators ON creators.creatorID = itemCreators.creatorID \
-                 WHERE creators.fieldMode = 0\
+                 WHERE creators.fieldMode = 0 AND itemCreators.creatorTypeID = 8 \
                  GROUP BY itemCreators.creatorID \
                  ORDER BY " + orderBy + (desc ? " desc" : "");
     const result = yield Zotero.DB.queryAsync(sql);
@@ -151,6 +151,8 @@ export async function getAllCreators(orderBy: "firstName"|"lastName"|"itemCount"
   await Zotero.DB.executeTransaction(async function () {
     rows = await doGetAllCreators();
     for (let i = 0; i < rows.length; i++) {
+      if(rows[i].itemCount == 0)
+        continue;
       if (
         !addon.data.authorAliases.aliasedCreatorIDs.includes(rows[i].creatorID)
       ) {

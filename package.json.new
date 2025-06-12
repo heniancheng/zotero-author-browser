@@ -1,0 +1,59 @@
+{
+  "author": "Junting Li",
+  "bugs": {
+    "url": "https://github.com/StevenGLee/zotero-author-browser/issues"
+  },
+  "config": {
+    "addonID": "authorbrowser@junting.li",
+    "addonInstance": "AuthorBrowser",
+    "addonName": "Zotero Author Browser",
+    "addonRef": "author-browser",
+    "prefsPrefix": "extensions.zotero.authorbrowser"
+  },
+  "dependencies": {
+    "release-it": "19.0.3",
+    "zotero-plugin-toolkit": "5.0.0"
+  },
+  "description": "Zotero Author Browser pannel",
+  "devDependencies": {
+    "@eslint/js": "9.28.0",
+    "@types/node": "24.0.1",
+    "eslint": "9.28.0",
+    "prettier": "3.5.3",
+    "typescript": "5.8.3",
+    "typescript-eslint": "8.34.0",
+    "zotero-plugin-scaffold": "0.6.0",
+    "zotero-types": "4.0.5-beta.0"
+  },
+  "homepage": "https://github.com/StevenGLee/zotero-author-browser",
+  "license": "AGPL-3.0-or-later",
+  "name": "zotero-author-browser",
+  "prettier": {
+    "endOfLine": "lf",
+    "overrides": [
+      {
+        "files": [
+          "*.xhtml"
+        ],
+        "options": {
+          "htmlWhitespaceSensitivity": "css"
+        }
+      }
+    ],
+    "printWidth": 80,
+    "tabWidth": 2
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/StevenGLee/zotero-author-browser.git"
+  },
+  "scripts": {
+    "build": "tsc --noEmit && zotero-plugin build",
+    "lint": "prettier --write . && eslint . --fix",
+    "release": "zotero-plugin release",
+    "start": "zotero-plugin serve",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "update-deps": "npm update --save"
+  },
+  "version": "0.1.4"
+}
