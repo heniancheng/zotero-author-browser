@@ -12,7 +12,7 @@ export async function onDialog() {
     // refresh();
   } else {
     const windowArgs = {
-      _initPromise: Zotero.Promise.defer(),
+      _initPromise: { promise: new Promise((resolve) => { windowArgs._initPromiseResolve = resolve; }) },
     };
     const win = Zotero.getMainWindow().openDialog(
       `chrome://${config.addonRef}/content/AliasEditor.xhtml`,
@@ -20,6 +20,7 @@ export async function onDialog() {
       `chrome,centerscreen,resizable,status,dialog=yes`,
       windowArgs,
     )!;
+    win.addEventListener("load", () => windowArgs._initPromiseResolve(win), { once: true });
     await windowArgs._initPromise.promise;
     addon.data.manager.aliasEditor.window = win;
     // updateData();
@@ -193,7 +194,7 @@ async function updateData() {
   addon.data.manager.data = (await getAllCreators(sortKey, addon.data.manager.columnAscending == false));
 }
 function updateButtons() {
-  const win = addon.data.manager.window;
+  const win = addon.data.manager.aliasEditor.window;
   if (!win) {
     return;
   }
@@ -233,7 +234,10 @@ async function swapNames() {
   const firstName = fields.firstName;
   fields.lastName = firstName;
   fields.firstName = lastName;
-  Zotero.Creators.updateCreator(creatorID, fields);
+  const creator = Zotero.Creators.get(creatorID);
+  creator.firstName = fields.firstName;
+  creator.lastName = fields.lastName;
+  await creator.save();
 }
 
 function canCapitalizeCreatorName(creatorID: number) {
@@ -251,5 +255,8 @@ async function capitalizeCreatorName() {
   const fields = Zotero.Creators.get(creatorID);
   fields.lastName = Zotero.Utilities.capitalizeName(fields.lastName);
   fields.firstName = Zotero.Utilities.capitalizeName(fields.firstName);
-  Zotero.Creators.updateCreator(creatorID, fields);
+  const creator = Zotero.Creators.get(creatorID);
+  creator.firstName = fields.firstName;
+  creator.lastName = fields.lastName;
+  await creator.save();
 }

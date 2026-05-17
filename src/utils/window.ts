@@ -6,5 +6,10 @@ export { isWindowAlive };
  * @param win
  */
 function isWindowAlive(win?: Window) {
-  return win && !Components.utils.isDeadWrapper(win) && !win.closed;
+  try {
+    // @ts-ignore - Components may not be in types
+    return win && !Components.utils.isDeadWrapper(win) && !win.closed;
+  } catch (e) {
+    return false;
+  }
 }

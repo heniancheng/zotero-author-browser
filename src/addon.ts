@@ -1,5 +1,4 @@
-import { VirtualizedTableHelper } from "zotero-plugin-toolkit/dist/helpers/virtualizedTable";
-import { DialogHelper } from "zotero-plugin-toolkit/dist/helpers/dialog";
+import { VirtualizedTableHelper, DialogHelper } from "zotero-plugin-toolkit";
 import hooks from "./hooks";
 import { createZToolkit } from "./utils/ztoolkit";
 import { CreatorDataRow } from "./modules/authorBrowserAddon";

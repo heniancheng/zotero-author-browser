@@ -18,41 +18,131 @@ export interface CreatorQueryDataRow {
   creatorID: number;
 }
 
-export function registerToolsMenuItem() {
-  ztoolkit.Menu.register("menuTools", {
-    tag: "menuseparator",
-  });
-  ztoolkit.Menu.register("menuTools", {
-    tag: "menuitem",
-    id: "author-browser-tool-menu-item",
-    label: getString("author-browser-tool-menu-item-label"),
-    commandListener: (ev) => onDialog(),
-  });
-  ztoolkit.Menu.register("menuTools", {
-    tag: "menuitem",
-    id: "author-browser-tool-menu-item",
-    label: getString("author-browser-tool-menu-clear-search"),
-    commandListener: (ev) => deleteABSavedSearches(),
-  });
+export function registerToolsMenuItem(): boolean {
+  // Get main window document
+  const mainWin = Zotero.getMainWindow();
+  if (!mainWin) {
+    Zotero.debug("Author Browser: Cannot get main window");
+    return false;
+  }
+  const doc = mainWin.document;
+
+  // Check if menu already exists
+  if (doc.querySelector("#author-browser-tool-menu-item")) {
+    Zotero.debug("Author Browser: Menu already exists, skipping");
+    return true;
+  }
+
+  // Try to find menu using Zotero's internal methods first
+  let menuPopup: Element | null = null;
+
+  // Method 1: Try Zotero's menu registry
+  try {
+    if (mainWin.ZoteroMenu && mainWin.ZoteroMenu.menus) {
+      Zotero.debug("Author Browser: Found Zotero menu registry");
+    }
+  } catch (e) {
+    Zotero.debug("Author Browser: No Zotero menu registry: " + e);
+  }
+
+  // Method 2: Try finding via document query
+  const menuSelectors = [
+    "menuTools",
+    "#menu_ToolsPopup",
+    "menupopup[id='menu_ToolsPopup']",
+    "menu[id='menu_Tools']",
+    "#tools-menu",
+    "menupopup.tools-menupopup",
+  ];
+
+  for (const selector of menuSelectors) {
+    menuPopup = doc.querySelector(selector);
+    if (menuPopup) break;
+  }
+
+  if (!menuPopup) {
+    // Debug: List all menu elements in document
+    const allMenus = doc.querySelectorAll("menu, menupopup, menubar > menu");
+    Zotero.debug("Author Browser: All menus found: " + Array.from(allMenus).map(m => `${m.tagName}#${m.id}[class=${m.className}]`).join(", "));
+    return false;
+  }
+
+  Zotero.debug("Author Browser: Found Tools menu: " + menuPopup.tagName);
+
+  // Force menu to rebuild/refresh before adding items
+  try {
+    // Try calling rebuild if available
+    if ((menuPopup as any).rebuild) {
+      (menuPopup as any).rebuild();
+    }
+  } catch (e) {
+    Zotero.debug("Author Browser: Could not rebuild menu: " + e);
+  }
+
+  // Create menu separator
+  const separator = doc.createElement("menuseparator");
+  menuPopup.appendChild(separator);
+
+  // Create "Zotero Author Browser" menu item
+  const menuItem = doc.createElement("menuitem");
+  menuItem.setAttribute("id", "author-browser-tool-menu-item");
+  menuItem.setAttribute("label", "Zotero Author Browser");
+  menuItem.setAttribute("accesskey", "A");
+  menuItem.addEventListener("command", (ev) => onDialog());
+  menuPopup.appendChild(menuItem);
+
+  // Create "Clear Search" menu item
+  const clearItem = doc.createElement("menuitem");
+  clearItem.setAttribute("id", "author-browser-tool-menu-clear-search");
+  clearItem.setAttribute("label", "Clear Author Search");
+  clearItem.addEventListener("command", (ev) => deleteABSavedSearches());
+  menuPopup.appendChild(clearItem);
+
+  // Verify items were added
+  const addedItems = menuPopup.querySelectorAll("#author-browser-tool-menu-item, #author-browser-tool-menu-clear-search");
+  Zotero.debug("Author Browser: Added " + addedItems.length + " menu items");
+
+  // Force menu popup to update its display
+  try {
+    menuPopup.dispatchEvent(new Event("popupshowing", { bubbles: true }));
+  } catch (e) {
+    Zotero.debug("Author Browser: Could not dispatch popupshowing: " + e);
+  }
+
+  // Also try adding to toolbar as fallback
+  const toolbar = doc.querySelector("#zotero-toolbar");
+  if (toolbar) {
+    const existingBtn = doc.querySelector("#author-browser-toolbar-button");
+    if (!existingBtn) {
+      Zotero.debug("Author Browser: Adding toolbar button");
+      const button = doc.createElement("toolbarbutton");
+      button.setAttribute("id", "author-browser-toolbar-button");
+      button.setAttribute("label", "Author Browser");
+      button.setAttribute("tooltiptext", "Open Author Browser");
+      button.setAttribute("image", "chrome://zotero-author-browser/content/icons/favicon@0.5x.png");
+      button.addEventListener("command", () => onDialog());
+      toolbar.appendChild(button);
+    }
+  }
+
+  return addedItems.length === 2;
 }
 
 export function registerCreatorTransformMenuItem() {
-  // const menuIcon = `chrome://${config.addonRef}/content/icons/favicon@0.5x.png`;
-  // item menuitem with icon
-  const menu = ztoolkit.Menu.getGlobal("document").querySelector(
-    "#zotero-creator-transform-menu",
-  ) as XUL.MenuPopup;
+  const doc = ztoolkit.getGlobal("document");
+  const menu = doc.querySelector("#zotero-creator-transform-menu") as Element;
+
   if (menu) {
-    ztoolkit.Menu.register(menu, {
-      tag: "menuseparator",
-    });
-    ztoolkit.Menu.register(menu, {
-      tag: "menuitem",
-      id: "zotero-show-author",
-      label: getString("show-author"),
-      commandListener: async (ev) => showAuthorFromPopupMenu(ev),
-      // icon: menuIcon,
-    });
+    // Create separator
+    const separator = doc.createElement("menuseparator");
+    menu.appendChild(separator);
+
+    // Create "Show Author" menu item
+    const menuItem = doc.createElement("menuitem");
+    menuItem.setAttribute("id", "zotero-show-author");
+    menuItem.setAttribute("label", getString("show-author"));
+    menuItem.addEventListener("command", async (ev) => showAuthorFromPopupMenu(ev));
+    menu.appendChild(menuItem);
   }
 }
 
@@ -133,23 +223,27 @@ function removeInvalidAuthorAliases() {
 }
 
 export async function getAllCreators(orderBy: "firstName"|"lastName"|"itemCount"|"creatorID", desc: boolean = false) {
-  const doGetAllCreators = Zotero.Promise.coroutine(function* () {
-    Zotero.DB.requireTransaction();
+  Zotero.debug("Author Browser: getAllCreators called, orderBy=" + orderBy + ", desc=" + desc);
+  const doGetAllCreators = async function () {
+    await Zotero.DB.requireTransaction();
     const sql = "SELECT creators.firstName, creators.lastName, creators.creatorID, COUNT(itemCreators.itemID) AS itemCount \
                  FROM creators \
                  JOIN itemCreators ON creators.creatorID = itemCreators.creatorID \
                  WHERE creators.fieldMode = 0 AND itemCreators.creatorTypeID = 8 \
                  GROUP BY itemCreators.creatorID \
                  ORDER BY " + orderBy + (desc ? " desc" : "");
-    const result = yield Zotero.DB.queryAsync(sql);
+    Zotero.debug("Author Browser: SQL: " + sql);
+    const result = await Zotero.DB.queryAsync(sql);
+    Zotero.debug("Author Browser: Query result rows: " + result?.length);
 
     return result;
-  });
+  };
 
   const creators: CreatorDataRow[] = [];
   let rows;
   await Zotero.DB.executeTransaction(async function () {
     rows = await doGetAllCreators();
+    Zotero.debug("Author Browser: Processing " + rows.length + " rows");
     for (let i = 0; i < rows.length; i++) {
       if(rows[i].itemCount == 0)
         continue;
@@ -168,6 +262,7 @@ export async function getAllCreators(orderBy: "firstName"|"lastName"|"itemCount"
       }
     }
   });
+  Zotero.debug("Author Browser: Final creators list length: " + creators.length);
   removeInvalidAuthorAliases();
   for (let i = 0; i < addon.data.authorAliases.aliases.length; i++) {
     const alias = addon.data.authorAliases.aliases[i];
@@ -267,7 +362,7 @@ export async function deleteABSavedSearches() {
     .filter((s) => (s.name as string).startsWith("[AB Temp]"));
 
   for (let i = 0; i < savedSearches.length; i++) {
-    savedSearches[i].eraseTx();
+    await savedSearches[i].erase();
   }
 }
 
@@ -305,10 +400,10 @@ async function showSearchToItemsView(s: Zotero.Search) {
   ZoteroPane.collectionsView.runListeners("select");
 }
 
-function saveSearchAndSelect(s: Zotero.Search) {
+async function saveSearchAndSelect(s: Zotero.Search) {
   deleteABSavedSearches();
   s.name = "[AB Temp] " + s.name;
-  s.saveTx();
+  await s.save();
   const savedSearches = Zotero.Searches.getAll(
     Zotero.Libraries.userLibraryID,
   ).filter((s) => !s.deleted);

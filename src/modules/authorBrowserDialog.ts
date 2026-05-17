@@ -9,25 +9,59 @@ import {
 } from "./authorBrowserAddon";
 
 export async function onDialog() {
-  refresh();
+  Zotero.debug("Author Browser: onDialog() called");
 
   if (isWindowAlive(addon.data.manager.window)) {
     addon.data.manager.window?.focus();
-    // refresh();
+    refresh();
   } else {
-    const windowArgs = {
-      _initPromise: Zotero.Promise.defer(),
+    Zotero.debug("Author Browser: Opening new dialog window");
+    const windowArgs: any = {};
+    windowArgs._initPromise = {
+      resolve: null,
+      promise: null as Promise<void>,
     };
+    windowArgs._initPromise.promise = new Promise((resolve) => {
+      windowArgs._initPromise.resolve = resolve;
+    });
     const win = Zotero.getMainWindow().openDialog(
       `chrome://${config.addonRef}/content/AllAuthorsWindow.xhtml`,
       `${config.addonRef}-allAuthorWindow`,
       `chrome,centerscreen,resizable,status,dialog=no`,
       windowArgs,
     )!;
+    Zotero.debug("Author Browser: Dialog opened, waiting for load");
+    win.addEventListener("load", () => {
+      Zotero.debug("Author Browser: Dialog load event fired");
+      windowArgs._initPromiseResolve(win);
+    }, { once: true });
+
+    Zotero.debug("Author Browser: About to await promise");
     await windowArgs._initPromise.promise;
-    addon.data.manager.window = win;
-    // updateData();
-    addon.data.manager.tableHelper = new ztoolkit.VirtualizedTable(win!)
+    Zotero.debug("Author Browser: Promise resolved!");
+
+    // Add small delay to ensure DOM is ready
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    try {
+      addon.data.manager.window = win;
+      Zotero.debug("Author Browser: Window set, updating data...");
+
+      // Initialize data first
+      await updateData();
+      Zotero.debug("Author Browser: Data initialized, rows: " + addon.data.manager.data.length);
+
+      // Check if table container exists
+      const tableContainer = win.document.getElementById("table-container");
+      Zotero.debug("Author Browser: table-container element: " + (tableContainer ? "found" : "NOT FOUND"));
+
+      if (!tableContainer) {
+        Zotero.debug("Author Browser: ERROR - table container not found!");
+        return;
+      }
+
+      Zotero.debug("Author Browser: Creating VirtualizedTable...");
+      addon.data.manager.tableHelper = new ztoolkit.VirtualizedTable(win!)
       .setContainerId("table-container")
       .setProp({
         id: "author-list",
@@ -67,13 +101,23 @@ export async function onDialog() {
         staticColumns: false,
         disableFontSizeScaling: true,
       })
-      .setProp("getRowCount", () => addon.data.manager.data.length)
-      .setProp("getRowData", (index) => ({
-        creatorID: String(addon.data.manager.data[index].creatorID),
-        firstName: addon.data.manager.data[index].firstName,
-        lastName: addon.data.manager.data[index].lastName,
-        itemCount: String(addon.data.manager.data[index].itemCount),
-      }))
+      .setProp("getRowCount", () => {
+        const count = addon.data.manager.data?.length || 0;
+        Zotero.debug("Author Browser: getRowCount = " + count);
+        return count;
+      })
+      .setProp("getRowData", (index) => {
+        const row = addon.data.manager.data?.[index];
+        if (!row) {
+          return { creatorID: "", firstName: "", lastName: "", itemCount: "" };
+        }
+        return {
+          creatorID: String(row.creatorID),
+          firstName: row.firstName || "",
+          lastName: row.lastName || "",
+          itemCount: String(row.itemCount || 0),
+        };
+      })
       .setProp("onSelectionChange", (selection) => {
         updateButtons();
       })
@@ -87,6 +131,11 @@ export async function onDialog() {
         quickSort();
       })
       .render();
+    Zotero.debug("Author Browser: Table rendered, checking element...");
+    const tableContainerCheck = win.document.getElementById("table-container");
+    Zotero.debug("Author Browser: table-container found: " + !!tableContainerCheck);
+    Zotero.debug("Author Browser: table container children: " + tableContainerCheck?.children?.length);
+
     const refreshButton = win.document.querySelector(
       "#refresh",
     ) as HTMLButtonElement;
@@ -126,8 +175,12 @@ export async function onDialog() {
     showItemsButton.addEventListener("click", () => {
       showAuthorByID(getSelectedNoteIds());
     });
+    Zotero.debug("Author Browser: All event listeners attached");
+  } catch (error) {
+    Zotero.debug("Author Browser: ERROR in onDialog: " + error);
   }
-}
+  }  // closes else block
+}  // closes onDialog function
 
 const sortDataKeys = ["creatorID", "firstName", "lastName", "itemCount"];
 
@@ -201,7 +254,10 @@ async function swapNames(creatorID: number) {
   const firstName = fields.firstName;
   fields.lastName = firstName;
   fields.firstName = lastName;
-  Zotero.Creators.updateCreator(creatorID, fields);
+  const creator = Zotero.Creators.get(creatorID);
+    creator.firstName = fields.firstName;
+    creator.lastName = fields.lastName;
+    await creator.save();
 }
 
 function canCapitalizeCreatorName(creatorID: number) {
@@ -219,7 +275,10 @@ async function capitalizeCreatorName() {
   const fields = Zotero.Creators.get(creatorID);
   fields.lastName = Zotero.Utilities.capitalizeName(fields.lastName);
   fields.firstName = Zotero.Utilities.capitalizeName(fields.firstName);
-  Zotero.Creators.updateCreator(creatorID, fields);
+  const creator = Zotero.Creators.get(creatorID);
+    creator.firstName = fields.firstName;
+    creator.lastName = fields.lastName;
+    await creator.save();
 }
 
 export async function remnameDialog(creatorID: number) {
