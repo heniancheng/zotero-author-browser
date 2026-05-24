@@ -11,7 +11,7 @@
     "prefsPrefix": "extensions.zotero.authorbrowser"
   },
   "dependencies": {
-    "release-it": "19.0.3",
+    "release-it": "20.0.1",
     "zotero-plugin-toolkit": "^5.1.2"
   },
   "description": "Zotero Author Browser pannel",
